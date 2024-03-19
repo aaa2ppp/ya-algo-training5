@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -14,188 +13,64 @@ type point struct {
 	x, y int32
 }
 
-type checker struct {
-	pnts map[point]struct{}
-	x    map[int32][]point
-	y    map[int32][]point
-	xy1  map[int32][]point
-	xy2  map[int32][]point
+func findTwoPnt(p1, p2 point) (p3, p4 point) {
+	dx := p2.x - p1.x
+	dy := p2.y - p1.y
+	p3 = point{p1.x - dy, p1.y + dx}
+	p4 = point{p2.x - dy, p2.y + dx}
+	return p3, p4
 }
 
-func newChecker(n int) checker {
-	return checker{
-		pnts: make(map[point]struct{}, n),
-		x:    make(map[int32][]point, n),
-		y:    make(map[int32][]point, n),
-		xy1:  make(map[int32][]point, n),
-		xy2:  make(map[int32][]point, n),
+func checkSegment(p1, p2 point, ps map[point]struct{}, res []point) []point {
+	p3, p4 := findTwoPnt(p1, p2)
+
+	var f, n int
+
+	if _, ok := ps[p3]; !ok {
+		f |= 1
+		n++
 	}
-}
 
-func (w *checker) addPnt(p point) {
-	w.pnts[p] = struct{}{}
-	w.x[p.y] = append(w.x[p.y], p)
-	w.y[p.x] = append(w.y[p.x], p)
-	w.xy1[p.x-p.y] = append(w.xy1[p.x-p.y], p)
-	w.xy2[p.x+p.y] = append(w.xy2[p.x+p.y], p)
-}
+	if _, ok := ps[p4]; !ok {
+		f |= 2
+		n++
+	}
 
-func (w *checker) check() []point {
-	res := []point{{0, 0}, {0, 1}, {1, 0}, {1, 1}}
-
-	for p := range w.pnts {
-		res = w.checkPnt(p, res)
-		if len(res) == 0 {
-			break
+	if n < len(res) {
+		res = res[:0]
+		if f & 1 != 0 {
+			res = append(res, p3)
+		}
+		if f & 2 != 0 {
+			res = append(res, p4)
 		}
 	}
 
 	return res
 }
 
-func (w *checker) checkPnt(p point, res []point) []point {
+func solution(points []point) (res []point) {
 
-	if len(res) > 3 {
-		res = res[:3]
-		res[0] = point{p.x + 1, p.y}
-		res[1] = point{p.x, p.y + 1}
-		res[2] = point{p.x + 1, p.y + 1}
+	p := points[0] // нам гарантируют как минимум одну точку
+	res =  []point{
+		{p.x, p.y + 1},
+		{p.x + 1, p.y},
+		{p.x + 1, p.y + 1},
 	}
 
-	res, w.x[p.y] = w.checkPntAxis(p, w.x[p.y], w.checkX, res)
-	if len(res) > 0 {
-		res, w.y[p.x] = w.checkPntAxis(p, w.y[p.x], w.checkY, res)
-	}
-	if len(res) > 0 {
-		res, w.xy1[p.x-p.y] = w.checkPntAxis(p, w.xy1[p.x-p.y], w.checkXY, res)
-	}
-	if len(res) > 0 {
-		res, w.xy2[p.x+p.y] = w.checkPntAxis(p, w.xy2[p.x+p.y], w.checkXY, res)
-	}
-	if len(res) > 0 {
-		delete(w.pnts, p)
+	pointSet := make(map[point]struct{}, len(points))
+	for _, p := range points {
+		pointSet[p] = struct{}{}
 	}
 
-	return res
-}
-
-func (w *checker) checkPntAxis(
-	p point,
-	axis []point,
-	check func(point, point, []point) []point,
-	res []point,
-) ([]point, []point) {
-
-	delete := func(i int) []point {
-		n := len(axis) - 1
-		axis[i] = axis[n]
-		return axis[:n]
-	}
-
-	for i := len(axis) - 1; i >= 0; i-- {
-		if axis[i] == p {
-			axis = delete(i)
-			continue
-		}
-		res = check(p, axis[i], res)
-		if len(res) == 0 {
-			break
-		}
-	}
-
-	return res, axis
-}
-
-func (w *checker) checkX(p1, p2 point, res []point) []point {
-
-	if p1.y != p2.y {
-		panic(fmt.Sprintf("checkX: p1.y must be equal p2.y, got %v, %v", p1, p2))
-	}
-
-	tmp := make([]point, 2)
-
-	d := p2.x - p1.x
-	for _, y := range []int32{p1.y + d, p1.y - d} {
-		tmp = tmp[:0]
-
-		for _, x := range []int32{p1.x, p2.x} {
-			p := point{x, y}
-
-			if _, ok := w.pnts[p]; !ok {
-				tmp = append(tmp, p)
+	for i, p1 := range points {
+		for _, p2 := range points[i+1:] {
+			res = checkSegment(p1, p2, pointSet, res)
+			res = checkSegment(p2, p1, pointSet, res)
+			if len(res) == 0 {
+				return nil
 			}
 		}
-
-		if len(tmp) < len(res) {
-			res = res[:len(tmp)]
-			copy(res, tmp)
-		}
-
-		if len(res) == 0 {
-			break
-		}
-	}
-
-	return res
-}
-
-func (w *checker) checkY(p1, p2 point, res []point) []point {
-
-	if p1.x != p2.x {
-		panic(fmt.Sprintf("checkY: p1.x must be equal p2.x, got %v, %v", p1, p2))
-	}
-
-	tmp := make([]point, 2)
-
-	d := p2.y - p1.y
-	for _, x := range []int32{p1.x + d, p1.x - d} {
-		tmp = tmp[:0]
-
-		for _, y := range []int32{p1.y, p2.y} {
-			p := point{x, y}
-
-			if _, ok := w.pnts[p]; !ok {
-				tmp = append(tmp, p)
-			}
-		}
-
-		if len(tmp) < len(res) {
-			res = res[:len(tmp)]
-			copy(res, tmp)
-		}
-
-		if len(res) == 0 {
-			break
-		}
-	}
-
-	return res
-}
-
-func abs(a int32) int32 {
-	if a < 0 {
-		return -a
-	}
-	return a
-}
-
-func (w *checker) checkXY(p1, p2 point, res []point) []point {
-
-	if abs(p1.x-p2.x) != abs(p1.y-p2.y) {
-		panic(fmt.Sprintf("checkXY: points must be on the same diagonal, got %v, %v", p1, p2))
-	}
-
-	tmp := make([]point, 0, 2)
-
-	for _, p := range []point{{p1.x, p2.y}, {p2.x, p1.y}} {
-		if _, ok := w.pnts[p]; !ok {
-			tmp = append(tmp, p)
-		}
-	}
-
-	if len(tmp) < len(res) {
-		res = res[:len(tmp)]
-		copy(res, tmp)
 	}
 
 	return res
@@ -212,17 +87,17 @@ func run(in io.Reader, out io.Writer) error {
 		return err
 	}
 
-	w := newChecker(n)
+	points := make([]point, 0, n)
 
 	for i := 0; i < n; i++ {
 		x, y, err := scanTwoInt(sc)
 		if err != nil {
 			return err
 		}
-		w.addPnt(point{int32(x), int32(y)})
+		points = append(points, point{int32(x), int32(y)})
 	}
 
-	res := w.check()
+	res := solution(points)
 
 	writeInt(bw, len(res))
 	bw.WriteByte('\n')

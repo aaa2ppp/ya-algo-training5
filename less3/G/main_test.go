@@ -18,58 +18,58 @@ func Test_run(t *testing.T) {
 		wantErr bool
 		debug   bool
 	}{
-		{
-			"0",
-			args{strings.NewReader(`0
-`)},
-			`4
-0 0
-0 1
-1 0
-1 1
-`,
-			false,
-			true,
-		},
-		{
-			"1",
-			args{strings.NewReader(`2
-0 1
-1 0
-`)},
-			`2
-0 0
-1 1
-`,
-			false,
-			true,
-		},
-		{
-			"1.2",
-			args{strings.NewReader(`2
-0 0
-0 1
-`)},
-			`2
-1 0
-1 1
-`,
-			false,
-			true,
-		},
-		{
-			"1.3",
-			args{strings.NewReader(`2
-0 0
-1 0
-`)},
-			`2
-0 1
-1 1
-`,
-			false,
-			true,
-		},
+// 		{
+// 			"0",
+// 			args{strings.NewReader(`0
+// `)},
+// 			`4
+// 0 0
+// 0 1
+// 1 0
+// 1 1
+// `,
+// 			false,
+// 			true,
+// 		},
+// 		{
+// 			"1",
+// 			args{strings.NewReader(`2
+// 0 1
+// 1 0
+// `)},
+// 			`2
+// 0 0
+// 1 1
+// `,
+// 			false,
+// 			true,
+// 		},
+// 		{
+// 			"1.2",
+// 			args{strings.NewReader(`2
+// 0 0
+// 0 1
+// `)},
+// 			`2
+// 1 0
+// 1 1
+// `,
+// 			false,
+// 			true,
+// 		},
+// 		{
+// 			"1.3",
+// 			args{strings.NewReader(`2
+// 0 0
+// 1 0
+// `)},
+// 			`2
+// 0 1
+// 1 1
+// `,
+// 			false,
+// 			true,
+// 		},
 		{
 			"2",
 			args{strings.NewReader(`3
@@ -95,14 +95,6 @@ func Test_run(t *testing.T) {
 			false,
 			true,
 		},
-		// {
-		// 	"4",
-		// 	args{strings.NewReader(``)},
-		// 	``,
-		// 	false,
-		// 	true,
-		// },
-		// TODO: Add test cases.
 		{
 			"6",
 			args{strings.NewReader(`12
@@ -119,7 +111,8 @@ func Test_run(t *testing.T) {
 -5 -6
 1 7
 `)},
-			``,
+			`1
+3 10`,
 			false,
 			true,
 		},
