@@ -67,7 +67,7 @@ func addScores(stats map[int]int, scores map[string]int) {
 }
 
 func printStats(stats map[int]int) {
-	for k := 20; k > 0; k-- {
+	for k := 40; k > 0; k-- {
 		if v, ok := stats[k]; ok {
 			fmt.Printf("%2d %4d\n", k, v)
 		}
@@ -76,7 +76,7 @@ func printStats(stats map[int]int) {
 
 func main() {
 	scores := make(map[string]int, 1000)
-	stats := make(map[int]int, 20)
+	stats := make(map[int]int, 40)
 
 	for i := 1; i <= 4; i++ {
 		fileName := fmt.Sprintf("less%d.csv", i)
