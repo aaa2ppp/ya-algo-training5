@@ -1,0 +1,442 @@
+package main
+
+import (
+	"bufio"
+	"io"
+	"log"
+	"os"
+	"sort"
+	"strconv"
+	"unsafe"
+)
+
+type net struct {
+	host            []host    // все хосты
+	roundCount      int       // счетчик раундов
+	partOrder       []uint8   // ранжированный список частей (обновляется на каждом раунде)
+	partSrc         []uint8   // хосты для запроса каждой части (обновляется на каждом раунде)
+	partCount       []uint8   // счетчики для каждой части (обновляются при получении хостом части)
+	totalPartsCount int       // общее количество частей в сети (обновляется при получении хостом части)
+	partHosts       [][]uint8 // cписки хостов на которых есть часть (обновляются при получении хостом части)
+
+	//
+	needParts    []uint8
+	partDests    [][]uint8
+	partDestsBuf []uint8
+	hostSet      map[uint8]struct{}
+}
+
+func (nt *net) hostsN() int {
+	return len(nt.host)
+}
+
+func (nt *net) partsN() int {
+	return len(nt.partOrder)
+}
+
+func (nt *net) init(hostsN, partsN int) {
+
+	if debugEnable {
+		log.Println("=== init")
+	}
+
+	// создаем хосты
+	{
+		// оптимизируем выделение памяти
+		requestBuf := make([]request, hostsN*hostsN)
+		peerValueBuf := make([]uint8, hostsN*hostsN)
+		partExistsBuf := make([]bool, hostsN*partsN)
+
+		nt.host = make([]host, hostsN)
+		for i, j, k := 0, 0, 0; i < len(nt.host); i, j, k = i+1, j+hostsN, k+partsN {
+			nt.host[i] = host{
+				net:        nt,
+				id:         uint8(i),
+				request:    requestBuf[j:j],
+				peerValue:  peerValueBuf[j : j+hostsN],
+				partExists: partExistsBuf[k : k+partsN],
+			}
+		}
+	}
+
+	// создаем счетчики для каждой части
+	nt.partCount = make([]uint8, partsN)
+
+	// cоздаем массив для ранжирования частей
+	nt.partOrder = make([]uint8, partsN)
+	for partID := range nt.partOrder {
+		nt.partOrder[partID] = uint8(partID)
+	}
+
+	// создаем cписки хостов на которых есть часть
+	{
+		buf := make([]uint8, hostsN*partsN) // оптимизируем выделение памяти
+
+		nt.partHosts = make([][]uint8, partsN)
+		for i, j := 0, 0; i < len(nt.partHosts); i, j = i+1, j+hostsN {
+			nt.partHosts[i] = buf[j:j]
+		}
+	}
+
+	// создаем множество хостов (для выбора получателей) 
+	nt.hostSet = make(map[uint8]struct{}, hostsN)
+
+	// создаем список требуемых частей
+	nt.needParts = make([]uint8, 0, partsN)
+
+	// создаем cписки хостов которым требуется часть
+	nt.partDests = make([][]uint8, 0, partsN)
+	nt.partDestsBuf = make([]uint8, hostsN)
+
+	// создаем массив под источники для каждой части
+	nt.partSrc = make([]uint8, partsN)
+
+	// заполняем первый хост всеми частями
+	{
+		h := &nt.host[0]
+		for partID := 0; partID < partsN; partID++ {
+			h.receivePartFrom(0, uint8(partID))
+		}
+	}
+}
+
+func (nt *net) doUpdate() {
+
+	full := nt.hostsN() * nt.partsN()
+	if debugEnable {
+		log.Printf("N.totalPartCount: %d/%d", nt.totalPartsCount, full)
+	}
+
+	for int(nt.totalPartsCount) < full {
+		nt.doRound()
+
+		if debugEnable {
+			log.Printf("N.totalPartCount: %d/%d", nt.totalPartsCount, full)
+		}
+	}
+}
+
+func (nt *net) doRound() {
+
+	nt.roundCount++
+	if debugEnable {
+		log.Println("=== round:", nt.roundCount)
+	}
+
+	// Каждое устройство выбирает отсутствующую на нем часть обновления, которая встречается в сети реже всего.
+	// Если таких частей несколько, то выбирается отсутствующая на устройстве часть обновления с наименьшим номером.
+
+	// Предварительно ранжируем части по размеру и id. Это должно уменьшить константу когда хост выберает часть.
+	// В обычном случае ему нужно пройти весь список. Вслучае если части отсортированы, хост выбирает первую из
+	// списка, которой у него нет.
+	sort.Slice(nt.partOrder, func(i, j int) bool {
+		i = int(nt.partOrder[i])
+		j = int(nt.partOrder[j])
+		return nt.partCount[i] < nt.partCount[j] || nt.partCount[i] == nt.partCount[j] && i < j
+	})
+
+	// находим для каждой части хосты получатели
+
+	{
+		for i := 0; i < nt.hostsN(); i++ {
+			nt.hostSet[uint8(i)] = struct{}{}
+		}
+
+		nt.needParts = nt.needParts[:0]
+		nt.partDests = nt.partDests[:0]
+		dests := nt.partDestsBuf[:0]
+
+		for _, partID := range nt.partOrder {
+			if len(nt.hostSet) == 0 {
+				break
+			}
+
+			for destID := range nt.hostSet {
+				if !nt.host[destID].partExists[partID] {
+					delete(nt.hostSet, destID)
+					dests = append(dests, destID)
+				}
+			}
+
+			if len(dests) > 0 {
+				nt.needParts = append(nt.needParts, partID)
+				nt.partDests = append(nt.partDests, dests)
+				dests = dests[len(dests):]
+			}
+		}
+	}
+
+	if debugEnable {
+		log.Printf("len(parts)=%d len(partDests)=%d", len(nt.needParts), len(nt.partDests))
+	}
+
+	// После этого устройство делает запрос выбранной части обновления у одного из устройств, на котором такая часть
+	// обновления уже скачана. Если таких устройств несколько — выбирается устройство, на котором скачано наименьшее
+	// количество частей обновления. Если и таких устройств оказалось несколько — выбирается устройство с минимальным
+	// номером.
+
+	for i, partID := range nt.needParts {
+		srcID := 0             // на хосте 0 всегда
+		minimum := nt.partsN() // есть все части
+
+		for _, id := range nt.partHosts[partID] {
+			h := &nt.host[id]
+			if int(h.partsCount) < minimum || int(h.partsCount) == minimum && int(id) < srcID {
+				srcID = int(id)
+				minimum = int(h.partsCount)
+			}
+		}
+
+		// хосты делают запросы
+		for _, destID := range nt.partDests[i] {
+			nt.host[srcID].receiveRequestFrom(destID, partID)
+		}
+	}
+
+	// // хосты делают запросы
+	// for id := range nt.host {
+	// 	nt.host[id].doRequest(parts)
+	// }
+
+	// хосты делают выбор
+	for id := range nt.host {
+		nt.host[id].doChoice()
+	}
+
+	// хосты делают посылки
+	for id := range nt.host {
+		nt.host[id].sendPart()
+	}
+}
+
+func (nt *net) hostReceivedPart(hostID, partID uint8) {
+
+	if debugEnable {
+		log.Println("N.hostReceivedPart:", hostID, partID)
+	}
+
+	nt.partCount[partID]++
+	nt.totalPartsCount++
+	nt.partHosts[partID] = append(nt.partHosts[partID], uint8(hostID))
+}
+
+type request struct {
+	hostID uint8
+	partID uint8
+}
+
+type host struct {
+	net        *net
+	request    []request
+	peerValue  []uint8
+	partExists []bool
+	// поля переупорядочены, чтобы оптимизировать размер памяти занимаемой структурой
+	id         uint8
+	partsCount uint8
+	finish     uint16
+	choice     request
+	needSend   bool
+}
+
+func (h *host) doRequest(parts []uint8) {
+
+	if h.finish != 0 {
+		return
+	}
+
+	// Каждое устройство выбирает отсутствующую на нем часть обновления, которая встречается в сети реже всего.
+	// Если таких частей несколько, то выбирается отсутствующая на устройстве часть обновления с наименьшим номером.
+
+	// Выбираем первую отсутствующую часть из предварительно ранжированого списка
+	for _, partID := range parts {
+		if !h.partExists[partID] {
+			id := h.net.partSrc[partID]
+			h.net.host[id].receiveRequestFrom(h.id, partID)
+			return
+		}
+	}
+}
+
+func (h *host) receiveRequestFrom(fromID, partID uint8) {
+
+	if debugEnable {
+		log.Printf("%d.receiveRequestFrom: %d %d", h.id, fromID, partID)
+	}
+
+	h.request = append(h.request, request{fromID, partID})
+}
+
+func (h *host) doChoice() {
+	if len(h.request) == 0 {
+		return
+	}
+
+	// Устройство A удовлетворяет тот запрос, который поступил от наиболее ценного для A устройства.
+	// Ценность устройства B для устройства A определяется как количество частей обновления, ранее
+	// полученных устройством A от устройства B. Если на устройство A пришло несколько запросов от
+	// одинаково ценных устройств, то удовлетворяется запрос того устройства, на котором меньше всего
+	// скачанных частей обновления. Если и таких запросов несколько, то среди них выбирается устройство
+	// с наименьшим номером.
+
+	br := h.request[0]
+	bh := &h.net.host[br.hostID]
+
+	for _, cr := range h.request {
+		ch := &h.net.host[cr.hostID]
+
+		if h.peerValue[ch.id] > h.peerValue[bh.id] ||
+			h.peerValue[ch.id] == h.peerValue[bh.id] && (ch.partsCount < bh.partsCount ||
+				bh.partsCount == ch.partsCount && ch.id < bh.id) {
+			br = cr
+			bh = ch
+		}
+	}
+
+	h.request = h.request[:0]
+	h.choice = br
+	h.needSend = true
+}
+
+func (h *host) sendPart() {
+
+	if !h.needSend {
+		return
+	}
+	h.needSend = false
+
+	peer := &h.net.host[h.choice.hostID]
+	peer.receivePartFrom(h.id, h.choice.partID)
+}
+
+func (h *host) receivePartFrom(fromID, partID uint8) {
+
+	if debugEnable {
+		log.Printf("%d.receivePartFrom: %d %d", h.id, fromID, partID)
+	}
+
+	h.peerValue[fromID]++
+	h.partExists[partID] = true
+
+	h.partsCount++
+	if debugEnable {
+		log.Printf("%d.partCount: %d/%d", h.id, h.partsCount, h.net.partsN())
+	}
+
+	if int(h.partsCount) == h.net.partsN() {
+		h.finish = uint16(h.net.roundCount)
+	}
+
+	// сообщаем сети, что получили часть
+	h.net.hostReceivedPart(h.id, partID)
+}
+
+func solve(n, k int) []int {
+	var nt net
+	nt.init(n, k)
+	nt.doUpdate()
+
+	res := make([]int, 0, n)
+	for id := 1; id < len(nt.host); id++ {
+		res = append(res, int(nt.host[id].finish))
+	}
+
+	return res
+}
+
+func run(in io.Reader, out io.Writer) error {
+	sc := bufio.NewScanner(in)
+	sc.Split(bufio.ScanWords)
+	bw := bufio.NewWriter(out)
+	defer bw.Flush()
+
+	n, k, err := scanTwoInt(sc)
+	if err != nil {
+		return err
+	}
+
+	res := solve(n, k)
+
+	writeInts(bw, res, " ")
+	bw.WriteByte('\n')
+
+	return nil
+}
+
+// ----------------------------------------------------------------------------
+
+func unsafeString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
+
+func scanInt(sc *bufio.Scanner) (int, error) {
+	sc.Scan()
+	return strconv.Atoi(unsafeString(sc.Bytes()))
+}
+
+func scanTwoInt(sc *bufio.Scanner) (v1, v2 int, err error) {
+	v1, err = scanInt(sc)
+	if err == nil {
+		v2, err = scanInt(sc)
+	}
+	return v1, v2, err
+}
+
+func scanThreeInt(sc *bufio.Scanner) (v1, v2, v3 int, err error) {
+	v1, err = scanInt(sc)
+	if err == nil {
+		v2, err = scanInt(sc)
+	}
+	if err == nil {
+		v3, err = scanInt(sc)
+	}
+	return v1, v2, v3, err
+}
+
+func scanInts(sc *bufio.Scanner, a []int) error {
+	for i := range a {
+		v, err := scanInt(sc)
+		if err != nil {
+			return err
+		}
+		a[i] = v
+	}
+	return nil
+}
+
+type Int interface {
+	~int | ~int64 | ~int32 | ~int16 | ~int8
+}
+
+func writeInt[I Int](bw *bufio.Writer, v I) error {
+	var buf [32]byte
+	_, err := bw.Write(strconv.AppendInt(buf[:0], int64(v), 10))
+	return err
+}
+
+func writeInts[I Int](bw *bufio.Writer, a []I, sep string) error {
+	if len(a) == 0 {
+		return nil
+	}
+
+	var buf [32]byte
+
+	_, err := bw.Write(strconv.AppendInt(buf[:0], int64(a[0]), 10))
+	for i := 1; err == nil && i < len(a); i++ {
+		_, err = bw.WriteString(sep)
+		if err == nil {
+			_, err = bw.Write(strconv.AppendInt(buf[:0], int64(a[i]), 10))
+		}
+	}
+
+	return err
+}
+
+var _, debugEnable = os.LookupEnv("DEBUG")
+
+func main() {
+	_ = debugEnable
+	err := run(os.Stdin, os.Stdout)
+	if err != nil {
+		log.Fatal(err)
+	}
+}

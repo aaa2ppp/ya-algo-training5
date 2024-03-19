@@ -1,0 +1,13 @@
+Вчистую проигрывает v2 по скорости...
+Сложность - вредна!
+
+goos: windows
+goarch: amd64
+
+pkg: ya-algo-training5/less3/J/v2
+cpu: Intel(R) Pentium(R) CPU G3250 @ 3.20GHz
+Benchmark_solve_100_200-2              5         215992120 ns/op          451336 B/op      13238 allocs/op
+
+pkg: ya-algo-training5/less3/J/v3
+cpu: Intel(R) Pentium(R) CPU G3250 @ 3.20GHz
+Benchmark_solve_100_200-2              2         966090400 ns/op          455976 B/op      12948 allocs/op
