@@ -20,7 +20,10 @@ def solution(points):
                 dx = p2[X] - p1[X]
                 dy = p2[Y] - p1[Y]
 
-                tmp = [pp for pp in ((p[X]-dy, p[Y]+dx) for p in (p1, p2)) if pp not in point_set]
+                p3 = (p1[X]-dy, p1[Y]+dx)
+                p4 = (p2[X]-dy, p2[Y]+dx)
+
+                tmp = [p for p in (p3, p4) if p not in point_set]
 
                 if len(tmp) < len(res):
                     res = tmp

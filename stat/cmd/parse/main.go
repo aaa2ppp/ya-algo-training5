@@ -20,13 +20,17 @@ func main() {
 			log.Fatal(err)
 		}
 
-		rows, err := parseDoc(buf)
-		if err != nil {
-			log.Fatal(err)
-		}
+		chunks := bytes.Split(buf, []byte("<!-- EOP -->"))
+		for _, chunk := range chunks {
 
-		w := csv.NewWriter(os.Stdout)
-		w.WriteAll(rows)
+			rows, err := parseDoc(chunk)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			w := csv.NewWriter(os.Stdout)
+			w.WriteAll(rows)
+		}
 	}
 }
 
@@ -107,7 +111,7 @@ func parseCell(buf []byte) (string, error) {
 		if buf[i] == '<' {
 
 			// insert space between blocks
-			if len(buf) - i >= 4 && unsafeString(buf[i:i+4]) == "<div" && prev != ' ' {
+			if len(buf)-i >= 4 && unsafeString(buf[i:i+4]) == "<div" && prev != ' ' {
 				sb.WriteByte(' ')
 				prev = ' '
 			}
@@ -153,5 +157,5 @@ func skipTag(buf []byte, i int) int {
 	for i < len(buf) && buf[i] != '>' {
 		i++
 	}
-	return i+1
+	return i + 1
 }

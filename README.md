@@ -16,7 +16,7 @@ https://youtube.com/live/7P4yu7rQADI?feature=share
 
 ДЗ https://contest.yandex.ru/contest/59540
 
-Разбор
+Разбор https://youtube.com/live/PyLX9vzrwqY?feature=share
 
 ## Лекция 3: Множества и словари
 
@@ -24,7 +24,12 @@ https://youtube.com/live/jQOnYzW8ZOE?feature=share
 
 ДЗ https://contest.yandex.ru/contest/59541
 
-Разбор 
+Разбор https://youtube.com/live/GQdvaoPxbZE?feature=share
 
 ## Лекция 4: Бинарный поиск
 
+https://youtube.com/live/-B6xvDeGyPg?feature=share
+
+ДЗ https://contest.yandex.ru/contest/59542/enter/ ?
+
+Разбор https://youtube.com/live/H2qC2rFES-s?feature=share

@@ -51,23 +51,22 @@ func readFile(fileName string, scores map[string]int) error {
 
 func uniqueName(names map[string]struct{}, name string) string {
 	i := 1
-	unique := name
+	unique := name + " [" + strconv.Itoa(i) + "]"
 	for _, ok := names[unique]; ok; _, ok = names[unique] {
 		i++
-		unique = name + strconv.Itoa(i)
+		unique = name + " [" + strconv.Itoa(i) + "]"
 	}
 	names[unique] = struct{}{}
 	return unique
 }
 
-func addScores(stats map[int]int, scores map[string]int) {
+func printStats(scores map[string]int) {
+	stats := make(map[int]int, 40)
 	for _, v := range scores {
 		stats[v]++
 	}
-}
 
-func printStats(stats map[int]int) {
-	for k := 40; k > 0; k-- {
+	for k := 40; k >= 0; k-- {
 		if v, ok := stats[k]; ok {
 			fmt.Printf("%2d %4d\n", k, v)
 		}
@@ -76,7 +75,7 @@ func printStats(stats map[int]int) {
 
 func main() {
 	scores := make(map[string]int, 1000)
-	stats := make(map[int]int, 40)
+	
 
 	for i := 1; i <= 4; i++ {
 		fileName := fmt.Sprintf("less%d.csv", i)
@@ -90,7 +89,6 @@ func main() {
 		}
 
 		fmt.Println(fileName)
-		addScores(stats, scores)
-		printStats(stats)
+		printStats(scores)
 	}
 }

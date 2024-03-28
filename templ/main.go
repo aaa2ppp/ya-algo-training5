@@ -19,15 +19,14 @@ func run(in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	
 	_ = n
 
-	// TODO
-
-	bw.WriteByte('\n')
+	// TDOD
 
 	return nil
 }
+
+// ----------------------------------------------------------------------------
 
 func unsafeString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
@@ -57,6 +56,20 @@ func scanThreeInt(sc *bufio.Scanner) (v1, v2, v3 int, err error) {
 	return v1, v2, v3, err
 }
 
+func scanFourInt(sc *bufio.Scanner) (v1, v2, v3, v4 int, err error) {
+	v1, err = scanInt(sc)
+	if err == nil {
+		v2, err = scanInt(sc)
+	}
+	if err == nil {
+		v3, err = scanInt(sc)
+	}
+	if err == nil {
+		v4, err = scanInt(sc)
+	}
+	return v1, v2, v3, v4, err
+}
+
 func scanInts(sc *bufio.Scanner, a []int) error {
 	for i := range a {
 		v, err := scanInt(sc)
@@ -72,25 +85,45 @@ type Int interface {
 	~int | ~int64 | ~int32 | ~int16 | ~int8
 }
 
-func writeInt[I Int](bw *bufio.Writer, v I) error {
+type writeOpts struct {
+	sep byte
+	end byte
+}
+
+func writeInt[I Int](bw *bufio.Writer, v I, opts writeOpts) error {
 	var buf [32]byte
+
 	_, err := bw.Write(strconv.AppendInt(buf[:0], int64(v), 10))
+
+	if err == nil && opts.end != 0 {
+		bw.WriteByte(opts.end)
+	}
+
 	return err
 }
 
-func writeInts[I Int](bw *bufio.Writer, a []I, sep string) error {
-	if len(a) == 0 {
-		return nil
+func writeInts[I Int](bw *bufio.Writer, a []I, opts writeOpts) error {
+	var err error
+
+	if len(a) != 0 {
+		var buf [32]byte
+
+		if opts.sep == 0 {
+			opts.sep = ' '
+		}
+
+		_, err = bw.Write(strconv.AppendInt(buf[:0], int64(a[0]), 10))
+
+		for i := 1; err == nil && i < len(a); i++ {
+			err = bw.WriteByte(opts.sep)
+			if err == nil {
+				_, err = bw.Write(strconv.AppendInt(buf[:0], int64(a[i]), 10))
+			}
+		}
 	}
 
-	var buf [32]byte
-
-	_, err := bw.Write(strconv.AppendInt(buf[:0], int64(a[0]), 10))
-	for i := 1; err == nil && i < len(a); i++ {
-		_, err = bw.WriteString(sep)
-		if err == nil {
-			_, err = bw.Write(strconv.AppendInt(buf[:0], int64(a[i]), 10))
-		}
+	if err == nil && opts.end != 0 {
+		err = bw.WriteByte(opts.end)
 	}
 
 	return err
