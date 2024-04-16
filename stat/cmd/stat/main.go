@@ -75,7 +75,11 @@ func printStats(scores map[string]int) {
 
 func main() {
 	scores := make(map[string]int, 1000)
-	
+
+	var k int
+	if len(os.Args) > 1 {
+		k, _ = strconv.Atoi(os.Args[1])
+	}
 
 	for i := 1; i <= 4; i++ {
 		fileName := fmt.Sprintf("less%d.csv", i)
@@ -89,6 +93,8 @@ func main() {
 		}
 
 		fmt.Println(fileName)
-		printStats(scores)
+		if i >= k {
+			printStats(scores)
+		}
 	}
 }

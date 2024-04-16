@@ -6,7 +6,6 @@
 // @author       You
 // @match        https://contest.yandex.ru/contest/*/enter/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
-// @grant        unsafeWindow
 // @grant        GM_setClipboard
 // ==/UserScript==
 
@@ -58,7 +57,6 @@
                 stop = true;
             }
         ));
-
 
         toolbar.insertAdjacentElement('beforeend', newButton(
             'Get',
